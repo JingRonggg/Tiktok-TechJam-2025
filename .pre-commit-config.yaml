@@ -3,4 +3,4 @@ repos:
     rev: 0.7.17
     hooks:
       - id: uv-lock
-        files: ^backend/
+        files: ^backend/(pyproject\.toml|uv\.lock)$
