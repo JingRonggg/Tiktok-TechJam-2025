@@ -3,3 +3,4 @@ repos:
     rev: 0.7.17
     hooks:
       - id: uv-lock
+        files: ^backend/
