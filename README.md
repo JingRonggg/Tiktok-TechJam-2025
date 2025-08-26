@@ -5,3 +5,5 @@
 pip install pre-commit
 pre-commit install
 ```
+![Swimlane](Swimlane.png)
+![Component](Component.png)
