@@ -6,6 +6,7 @@ from PIL import Image
 import io
 import foolbox as fb
 import numpy as np
+from transformers import CLIPProcessor, CLIPModel
 
 app = FastAPI()
 
@@ -16,7 +17,14 @@ def get_model():
     return model
 
 
+def get_streetclip_model():
+    model = CLIPModel.from_pretrained("geolocal/StreetCLIP")
+    processor = CLIPProcessor.from_pretrained("geolocal/StreetCLIP")
+    return model, processor
+
+
 model = get_model()
+streetclip_model, streetclip_processor = get_streetclip_model()
 fmodel = fb.PyTorchModel(model, bounds=(0, 1))
 attack = fb.attacks.FGSM()
 
@@ -49,6 +57,135 @@ async def adversarial_attack(file: UploadFile = File(...)):
     adv_pil.save(buf, format="PNG")
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
+
+
+@app.post("/results")
+async def analysis_result(file: UploadFile = File(...)):
+    image_bytes = await file.read()
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+
+    choices = [
+        "Albania",
+        "Iceland",
+        "Puerto Rico",
+        "Andorra",
+        "India",
+        "Romania",
+        "Argentina",
+        "Indonesia",
+        "Russia",
+        "Australia",
+        "Ireland",
+        "Rwanda",
+        "Austria",
+        "Israel",
+        "Senegal",
+        "Bangladesh",
+        "Italy",
+        "Serbia",
+        "Belgium",
+        "Japan",
+        "Singapore",
+        "Bermuda",
+        "Jordan",
+        "Slovakia",
+        "Bhutan",
+        "Kenya",
+        "Slovenia",
+        "Bolivia",
+        "Kyrgyzstan",
+        "South Africa",
+        "Botswana",
+        "Laos",
+        "South Korea",
+        "Brazil",
+        "Latvia",
+        "Spain",
+        "Bulgaria",
+        "Lesotho",
+        "Sri Lanka",
+        "Cambodia",
+        "Lithuania",
+        "Swaziland",
+        "Canada",
+        "Luxembourg",
+        "Sweden",
+        "Chile",
+        "Macedonia",
+        "Switzerland",
+        "China",
+        "Madagascar",
+        "Taiwan",
+        "Colombia",
+        "Malaysia",
+        "Thailand",
+        "Croatia",
+        "Malta",
+        "Tunisia",
+        "Czech Republic",
+        "Mexico",
+        "Turkey",
+        "Denmark",
+        "Monaco",
+        "Uganda",
+        "Dominican Republic",
+        "Mongolia",
+        "Ukraine",
+        "Ecuador",
+        "Montenegro",
+        "United Arab Emirates",
+        "Estonia",
+        "Netherlands",
+        "United Kingdom",
+        "Finland",
+        "New Zealand",
+        "United States",
+        "France",
+        "Nigeria",
+        "Uruguay",
+        "Germany",
+        "Norway",
+        "Ghana",
+        "Pakistan",
+        "Greece",
+        "Palestine",
+        "Greenland",
+        "Peru",
+        "Guam",
+        "Philippines",
+        "Guatemala",
+        "Poland",
+        "Hungary",
+        "Portugal",
+    ]
+
+    inputs = streetclip_processor(
+        text=choices, images=image, return_tensors="pt", padding=True
+    )
+
+    outputs = streetclip_model(**inputs)
+    logits_per_image = outputs.logits_per_image  # image-text similarity score
+    probs = logits_per_image.softmax(dim=1)  # get label probabilities
+
+    pred_idx = torch.argmax(probs, dim=1).item()
+    top_prediction = choices[pred_idx]
+    top_confidence = float(probs[0, pred_idx])
+
+    all_predictions = []
+    for name, p in zip(choices, probs[0].tolist()):
+        rounded_confidence = round(p, 3)
+        if rounded_confidence > 0:
+            all_predictions.append({"location": name, "confidence": rounded_confidence})
+
+    all_predictions.sort(key=lambda x: x["confidence"], reverse=True)
+
+    return {
+        "top_prediction": {
+            "location": top_prediction,
+            "confidence": round(top_confidence, 3),
+        },
+        "all_predictions": all_predictions,
+    }
 
 
 @app.get("/")

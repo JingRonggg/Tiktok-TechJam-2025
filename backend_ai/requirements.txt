@@ -4,3 +4,6 @@ torch
 torchvision
 foolbox
 python-multipart
+transformers
+Pillow
+numpy
